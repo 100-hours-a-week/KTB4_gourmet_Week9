@@ -168,15 +168,6 @@ localStorage 저장 값
 - profileImage
 ```
 
-#### 연동 확인 시 주의사항
-
-쿠키 `SameSite=Lax` 환경에서는 프론트와 API의 호스트를 맞춰야 한다.
-
-| 프론트 | API | 결과 |
-| --- | --- | --- |
-| `http://localhost:5500` | `http://localhost:8080` | 정상 |
-| `http://127.0.0.1:5500` | `http://localhost:8080` | 쿠키 미전송으로 로그인 필요 알림 발생 가능 |
-
 ---
 
 ## 주요 추가 / 수정 파일
