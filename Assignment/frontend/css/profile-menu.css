@@ -5,7 +5,8 @@
     transform: translateY(-50%);
 }
 
-.profile-menu-wrapper .profile-button {
+.profile-menu-wrapper .profile-button,
+.profile-menu-wrapper .header-profile-button {
     position: static;
     transform: none;
     width: 36px;
@@ -14,6 +15,8 @@
     border: none;
     border-radius: 50%;
     background-color: #d9d9d9;
+    background-size: cover;
+    background-position: center;
     cursor: pointer;
 }
 

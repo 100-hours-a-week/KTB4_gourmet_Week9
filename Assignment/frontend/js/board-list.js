@@ -1,10 +1,26 @@
-const writeButton = document.querySelector("#write-button");
 const postList = document.querySelector("#post-list");
+
+const CURRENT_BOARD = document.body.dataset.board || "free";
 
 let currentPage = 0;
 const pageSize = 10;
 let isLoading = false;
 let hasMore = true;
+const renderedPostIds = new Set();
+
+const BOARD_EMPTY_MESSAGES = {
+    free: "아직 자유 게시판에 글이 없습니다.",
+    question: "아직 등록된 질문이 없습니다. 첫 질문을 남겨보세요.",
+    study: "아직 학습 기록이 없습니다. 오늘의 배움을 남겨보세요.",
+    project: "아직 모집 중인 프로젝트가 없습니다."
+};
+
+const BOARD_BADGES = {
+    free: "FREE",
+    question: "Q&A",
+    study: "STUDY LOG",
+    project: "RECRUIT"
+};
 
 function formatCount(count) {
     if (!count) {
@@ -27,7 +43,7 @@ function formatDate(dateValue) {
 }
 
 function getPostId(post) {
-    return post.postId ?? post.id;
+    return extractPostId(post);
 }
 
 function getPostTitle(post) {
@@ -59,8 +75,15 @@ function getWriterProfileImageUrl(post) {
 function createStatElement(label, count) {
     const stat = document.createElement("span");
     stat.textContent = `${label} ${formatCount(count)}`;
-
     return stat;
+}
+
+function clearEmptyMessage() {
+    const emptyMessage = postList.querySelector(".empty-message");
+
+    if (emptyMessage) {
+        emptyMessage.remove();
+    }
 }
 
 function createPostCard(post) {
@@ -82,6 +105,10 @@ function createPostCard(post) {
     const postCardText = document.createElement("div");
     postCardText.className = "post-card-text";
 
+    const badge = document.createElement("span");
+    badge.className = "post-badge";
+    badge.textContent = BOARD_BADGES[CURRENT_BOARD] || "POST";
+
     const postTitle = document.createElement("h2");
     postTitle.className = "post-title";
     postTitle.textContent = getPostTitle(post);
@@ -93,8 +120,23 @@ function createPostCard(post) {
     postStats.appendChild(createStatElement("댓글", post.commentCount));
     postStats.appendChild(createStatElement("조회수", post.viewCount));
 
+    postCardText.appendChild(badge);
     postCardText.appendChild(postTitle);
     postCardText.appendChild(postStats);
+
+    if (CURRENT_BOARD === "project") {
+        const parsed = parseProjectContent(post.content);
+        const meta = getProjectMeta(postId);
+        const periodStart = meta?.periodStart || parsed.periodStart;
+        const periodEnd = meta?.periodEnd || parsed.periodEnd;
+
+        if (periodStart && periodEnd) {
+            const period = document.createElement("p");
+            period.className = "post-period";
+            period.textContent = `모집 기간 ${periodStart} ~ ${periodEnd}`;
+            postCardText.appendChild(period);
+        }
+    }
 
     postCardTop.appendChild(postCardText);
 
@@ -141,20 +183,66 @@ function createPostCard(post) {
     article.appendChild(postWriter);
 
     article.addEventListener("click", function () {
+        localStorage.setItem("selectedPostId", postId);
         window.location.href = `./post-detail.html?postId=${postId}`;
     });
 
     return article;
 }
 
-function renderEmptyMessage(message = "아직 작성된 게시글이 없습니다.") {
+function appendPosts(posts) {
+    if (!posts.length) {
+        return 0;
+    }
+
+    clearEmptyMessage();
+
+    let appended = 0;
+
+    posts.forEach(function (post) {
+        const postId = String(getPostId(post) ?? "");
+
+        if (!postId || renderedPostIds.has(postId)) {
+            return;
+        }
+
+        renderedPostIds.add(postId);
+        postList.appendChild(createPostCard(post));
+        appended += 1;
+    });
+
+    return appended;
+}
+
+function renderEmptyMessage(message) {
     postList.replaceChildren();
+    renderedPostIds.clear();
 
     const emptyMessage = document.createElement("p");
     emptyMessage.className = "empty-message";
-    emptyMessage.textContent = message;
+    emptyMessage.textContent = message || BOARD_EMPTY_MESSAGES[CURRENT_BOARD] || "게시글이 없습니다.";
 
     postList.appendChild(emptyMessage);
+}
+
+function getPageContent(pageData) {
+    if (Array.isArray(pageData)) {
+        return pageData;
+    }
+
+    return pageData.content ?? pageData.posts ?? pageData.data ?? [];
+}
+
+function getHasNext(pageData, fetchedCount) {
+    if (typeof pageData.hasNext === "boolean") {
+        return pageData.hasNext;
+    }
+
+    if (typeof pageData.last === "boolean") {
+        return !pageData.last;
+    }
+
+    return fetchedCount >= pageSize;
 }
 
 async function fetchPosts() {
@@ -172,27 +260,38 @@ async function fetchPosts() {
         }
 
         const pageData = await response.json();
-        const posts = pageData.content ?? [];
+        const rawPosts = getPageContent(pageData);
+        const posts = filterPostsByBoard(rawPosts, CURRENT_BOARD);
 
         console.log("게시글 목록 조회 성공:", pageData);
 
-        if (currentPage === 0 && posts.length === 0) {
+        if (currentPage === 0 && posts.length === 0 && !getHasNext(pageData, rawPosts.length)) {
             renderEmptyMessage();
             hasMore = false;
             return;
         }
 
-        posts.forEach(function (post) {
-            const postCard = createPostCard(post);
-            postList.appendChild(postCard);
-        });
+        appendPosts(posts);
 
-        hasMore = pageData.hasNext;
-        currentPage = pageData.page + 1;
+        hasMore = getHasNext(pageData, rawPosts.length);
+        currentPage = (pageData.page ?? currentPage) + 1;
+
+        const cardCount = postList.querySelectorAll(".post-card").length;
+
+        // 게시판 필터로 비면 다음 페이지를 더 가져온다 (Spring 목록 API 유지)
+        if (hasMore && cardCount < 8) {
+            isLoading = false;
+            fetchPosts();
+            return;
+        }
+
+        if (!hasMore && cardCount === 0) {
+            renderEmptyMessage();
+        }
     } catch (error) {
         console.error(error);
 
-        if (currentPage === 0) {
+        if (currentPage === 0 && postList.querySelectorAll(".post-card").length === 0) {
             renderEmptyMessage("게시글 목록을 불러오지 못했습니다.");
         }
     } finally {
@@ -205,75 +304,11 @@ function handleInfiniteScroll() {
     const windowHeight = window.innerHeight;
     const documentHeight = document.documentElement.scrollHeight;
 
-    const isBottom = scrollTop + windowHeight >= documentHeight - 100;
-
-    if (isBottom) {
+    if (scrollTop + windowHeight >= documentHeight - 100) {
         fetchPosts();
     }
 }
 
-writeButton.addEventListener("click", function () {
-    const userId = localStorage.getItem("userId");
-
-    if (!userId) {
-        alert("로그인이 필요합니다.");
-        window.location.href = "./login.html";
-        return;
-    }
-
-    window.location.href = "./post-create.html";
-});
-
 window.addEventListener("scroll", handleInfiniteScroll);
 
 fetchPosts();
-
-/* ---------- UI only: sidebar / board tabs / search (API 로직과 분리) ---------- */
-
-const layout = document.querySelector("#layout");
-const navToggle = document.querySelector("#nav-toggle");
-const boardLinks = document.querySelectorAll(".board-link");
-const listHeading = document.querySelector("#list-heading");
-const headerSearch = document.querySelector("#header-search");
-
-const boardTitles = {
-    all: "전체 글",
-    free: "자유",
-    question: "질문",
-    study: "학습 기록",
-    project: "프로젝트 모집"
-};
-
-if (navToggle && layout) {
-    navToggle.addEventListener("click", function () {
-        const collapsed = layout.classList.toggle("sidebar-collapsed");
-        navToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-        navToggle.setAttribute(
-            "aria-label",
-            collapsed ? "게시판 메뉴 열기" : "게시판 메뉴 닫기"
-        );
-    });
-}
-
-boardLinks.forEach(function (link) {
-    link.addEventListener("click", function () {
-        boardLinks.forEach(function (item) {
-            item.classList.remove("is-active");
-        });
-
-        link.classList.add("is-active");
-
-        const board = link.dataset.board || "all";
-
-        if (listHeading) {
-            listHeading.textContent = boardTitles[board] || "전체 글";
-        }
-    });
-});
-
-if (headerSearch) {
-    headerSearch.addEventListener("submit", function (event) {
-        event.preventDefault();
-        alert("통합 검색은 곧 연결될 예정입니다.");
-    });
-}

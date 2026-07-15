@@ -8,6 +8,97 @@ const fileName = document.querySelector("#file-name");
 
 const helperText = document.querySelector("#form-helper");
 const submitButton = document.querySelector("#submit-button");
+const formEyebrow = document.querySelector("#form-eyebrow");
+const formTitle = document.querySelector("#form-title");
+const formDesc = document.querySelector("#form-desc");
+
+const boardParams = new URLSearchParams(window.location.search);
+const boardType = boardParams.get("board") || "free";
+
+const BOARD_COPY = {
+    free: {
+        eyebrow: "Free Board",
+        title: "자유 게시글 작성",
+        desc: "자유롭게 이야기를 남겨보세요.",
+        contentPlaceholder: "내용을 입력해주세요."
+    },
+    question: {
+        eyebrow: "Q & A",
+        title: "질문 등록",
+        desc: "막힌 지점과 시도한 내용을 함께 적어주세요.",
+        contentPlaceholder: "질문 내용, 시도한 방법, 에러 메시지 등을 적어주세요."
+    },
+    study: {
+        eyebrow: "Study Journal",
+        title: "학습 기록 작성",
+        desc: "오늘의 배움을 일지처럼 남겨보세요.",
+        contentPlaceholder: "오늘 배운 것, 느낀 점, 다음에 할 일을 적어주세요."
+    }
+};
+
+const copy = BOARD_COPY[boardType] || BOARD_COPY.free;
+
+if (formEyebrow) {
+    formEyebrow.textContent = copy.eyebrow;
+}
+
+if (formTitle) {
+    formTitle.textContent = copy.title;
+}
+
+if (formDesc) {
+    formDesc.textContent = copy.desc;
+}
+
+if (contentInput) {
+    contentInput.placeholder = copy.contentPlaceholder;
+}
+
+document.title = `${copy.title} · Gourmet Community`;
+
+function safeSetPostBoard(postId, type) {
+    if (typeof rememberCreatedPost === "function") {
+        rememberCreatedPost(postId, type);
+        return;
+    }
+
+    if (typeof setPostBoard === "function") {
+        setPostBoard(postId, type);
+        return;
+    }
+
+    try {
+        const key = "gourmetBoardMap";
+        const map = JSON.parse(localStorage.getItem(key) || "{}");
+        map[String(postId)] = type;
+        localStorage.setItem(key, JSON.stringify(map));
+    } catch (error) {
+        console.error("게시판 저장 오류:", error);
+    }
+}
+
+function safeExtractPostId(post) {
+    if (typeof extractPostId === "function") {
+        return extractPostId(post);
+    }
+
+    return post?.postId ?? post?.id ?? null;
+}
+
+function safeGetBoardPage(type) {
+    if (typeof getBoardPage === "function") {
+        return getBoardPage(type);
+    }
+
+    const pages = {
+        free: "./posts.html",
+        question: "./question.html",
+        study: "./study.html",
+        project: "./project.html"
+    };
+
+    return pages[type] || pages.free;
+}
 
 let selectedImage = null;
 
@@ -97,14 +188,17 @@ postCreateForm.addEventListener("submit", async function (event) {
 
         console.log("게시글 작성 성공:", post);
 
-        const postId = post.postId ?? post.id;
+        const postId = safeExtractPostId(post);
 
         if (postId) {
             localStorage.setItem("selectedPostId", postId);
+            safeSetPostBoard(postId, boardType);
+        } else {
+            console.warn("작성 응답에서 postId를 찾지 못했습니다:", post);
         }
 
         alert("게시글이 작성되었습니다.");
-        window.location.href = "./posts.html";
+        window.location.href = safeGetBoardPage(boardType);
     } catch (error) {
         console.error("게시글 작성 요청 오류:", error);
         helperText.textContent = `* ${error?.message ?? "게시글 작성에 실패했습니다."}`;
@@ -112,5 +206,5 @@ postCreateForm.addEventListener("submit", async function (event) {
 });
 
 backButton.addEventListener("click", function () {
-    window.location.href = "./posts.html";
+    window.location.href = safeGetBoardPage(boardType);
 });

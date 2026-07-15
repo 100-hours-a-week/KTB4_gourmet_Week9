@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import KTB4_gourmet_Week9.Assignment.auth.SecurityUtil;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 
@@ -30,6 +31,7 @@ public class UserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final FileStorageService fileStorageService;
     private final JwtProvider jwtProvider;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public UserResponseDto signup(UserSignupRequestDto request, MultipartFile profileImage) {
@@ -43,9 +45,11 @@ public class UserService {
 
         String profileImageUrl = fileStorageService.saveFile(profileImage, "profile");
 
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+
         User user = new User(
                 request.getEmail(),
-                request.getPassword(),
+                encodedPassword,
                 request.getNickname(),
                 profileImageUrl
         );
@@ -64,7 +68,7 @@ public class UserService {
             throw new InvalidLoginException("이메일 또는 비밀번호가 일치하지 않습니다.");
         }
 
-        if (!user.getPassword().equals(request.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new InvalidLoginException("이메일 또는 비밀번호가 일치하지 않습니다.");
         }
 
@@ -212,7 +216,8 @@ public class UserService {
 
         User user = findUserById(userId);
 
-        user.updatePassword(request.getPassword());
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+        user.updatePassword(encodedPassword);
 
         return new UserResponseDto(user);
     }

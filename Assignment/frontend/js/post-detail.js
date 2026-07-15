@@ -385,9 +385,46 @@ function renderPostDetail(post) {
     const postActions = document.querySelector(".post-actions");
     const postImageList = document.querySelector("#post-image-list");
     const writerImage = document.querySelector(".writer-image");
+    const detailEyebrow = document.querySelector("#detail-eyebrow");
+    const projectPeriod = document.querySelector("#project-period");
+
+    const postId = post.postId ?? post.id;
+    const boardType = getPostBoard(postId) || "free";
+    const boardEyebrows = {
+        free: "Free Board",
+        question: "Q & A",
+        study: "Study Journal",
+        project: "Project Recruit"
+    };
+
+    if (detailEyebrow) {
+        detailEyebrow.textContent = boardEyebrows[boardType] || "Post";
+    }
 
     postTitle.textContent = post.title ?? "제목 없음";
-    postContent.textContent = post.content ?? "";
+
+    let displayContent = post.content ?? "";
+
+    if (projectPeriod) {
+        if (boardType === "project") {
+            const parsed = parseProjectContent(displayContent);
+            const meta = getProjectMeta(postId);
+            const periodStart = meta?.periodStart || parsed.periodStart;
+            const periodEnd = meta?.periodEnd || parsed.periodEnd;
+
+            if (periodStart && periodEnd) {
+                projectPeriod.hidden = false;
+                projectPeriod.textContent = "모집 기간 " + periodStart + " ~ " + periodEnd;
+                displayContent = parsed.content || displayContent;
+            } else {
+                projectPeriod.hidden = true;
+            }
+        } else {
+            projectPeriod.hidden = true;
+        }
+    }
+
+    postContent.textContent = displayContent;
 
     if (writerImage && post.profileImage) {
         writerImage.style.backgroundImage = `url(${API_BASE_URL}${post.profileImage})`;
@@ -472,7 +509,9 @@ async function fetchPostDetail() {
 }
 
 backButton.addEventListener("click", function () {
-    window.location.href = "./posts.html";
+    const postId = getSelectedPostId();
+    const boardType = getPostBoard(postId) || "free";
+    window.location.href = getBoardPage(boardType);
 });
 
 postEditButton.addEventListener("click", function () {
@@ -523,7 +562,8 @@ postDeleteConfirm.addEventListener("click", async function () {
 
         closeModal(postDeleteModal);
         alert("게시글이 삭제되었습니다.");
-        window.location.href = "./posts.html";
+        const boardType = getPostBoard(postId) || "free";
+        window.location.href = getBoardPage(boardType);
     } catch (error) {
         console.error("게시글 삭제 요청 오류:", error);
         alert(error?.message ?? "게시글 삭제에 실패했습니다.");

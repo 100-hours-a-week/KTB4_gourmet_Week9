@@ -9,6 +9,7 @@ import KTB4_gourmet_Week9.Assignment.exception.UserNotFoundException;
 import KTB4_gourmet_Week9.Assignment.repository.PostLikeRepository;
 import KTB4_gourmet_Week9.Assignment.repository.PostRepository;
 import KTB4_gourmet_Week9.Assignment.repository.UserRepository;
+import KTB4_gourmet_Week9.Assignment.auth.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,8 @@ public class PostLikeService {
     private final UserRepository userRepository;
 
     public PostLikeResponseDto getLikeStatus(Long postId, Long userId) {
+        SecurityUtil.validateLoginUser(userId);
+
         boolean liked = postLikeRepository.existsByUser_IdAndPost_Id(userId, postId);
         long likeCount = postLikeRepository.countByPost_Id(postId);
 
@@ -31,6 +34,9 @@ public class PostLikeService {
 
     @Transactional
     public PostLikeResponseDto toggleLike(Long postId, Long userId) {
+
+        SecurityUtil.validateLoginUser(userId);
+
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new PostNotFoundException("게시글을 찾을 수 없습니다."));
 
